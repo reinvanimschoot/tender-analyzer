@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { apiRequest, BASE } from "./helpers";
+import { apiRequest } from "./http";
 import {
   DocumentsResponse,
   DownloadUrlResponse,
@@ -14,7 +14,7 @@ export async function getToken(): Promise<string> {
   const credentials = btoa(`${env.PP_CLIENT_ID}:${env.PP_CLIENT_SECRET}`);
 
   const response = await fetch(
-    `${BASE}/auth/realms/supplier/protocol/openid-connect/token`,
+    `${env.PP_BASE_URL}/auth/realms/supplier/protocol/openid-connect/token`,
     {
       method: "POST",
       headers: {

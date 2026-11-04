@@ -1,4 +1,4 @@
-export const BASE = "https://www.publicprocurement.be";
+import { env } from "../config";
 
 type RequestOptions = {
   method?: "GET" | "POST";
@@ -17,7 +17,7 @@ export async function apiRequest(
 
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
 
-  const response = await fetch(`${BASE}${path}`, {
+  const response = await fetch(`${env.PP_BASE_URL}${path}`, {
     method: options.method ?? "GET",
     headers,
     body: options.body === undefined ? null : JSON.stringify(options.body),
