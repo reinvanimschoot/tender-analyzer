@@ -1,16 +1,14 @@
-import z from "zod";
-import { env } from "../config.js";
+import { createHash } from "crypto";
+import { apiRequest, BASE } from "./helpers";
 import {
   DocumentsResponse,
   DownloadUrlResponse,
   SearchResponse,
   TokenResponse,
 } from "./schema";
-import { createHash } from "crypto";
 import path from "path";
 import { mkdir, writeFile } from "fs/promises";
-
-const BASE = "https://www.publicprocurement.be";
+import { env } from "../config";
 
 export async function getToken(): Promise<string> {
   const credentials = btoa(`${env.PP_CLIENT_ID}:${env.PP_CLIENT_SECRET}`);
@@ -31,9 +29,9 @@ export async function getToken(): Promise<string> {
   );
 
   if (!response.ok) {
-    const body = await response.text();
+    const text = await response.text();
 
-    throw new Error(`Token request failed: ${body}`);
+    throw new Error(`Token request failed: ${response.status} ${text}`);
   }
 
   const data = TokenResponse.parse(await response.json());
@@ -46,24 +44,12 @@ export async function searchPublications(
   page = 1,
   pageSize = 25,
 ): Promise<SearchResponse> {
-  const response = await fetch(`${BASE}/api/sea/search/publications`, {
+  const data = await apiRequest(token, "/api/sea/search/publications", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "BelGov-Trace-Id": crypto.randomUUID(),
-    },
-    body: JSON.stringify({ includeOrganisationChildren: true, page, pageSize }),
+    body: { includeOrganisationChildren: true, page, pageSize },
   });
 
-  if (!response.ok) {
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Search failed: ${response.status} ${body}`);
-    }
-  }
-
-  return SearchResponse.parse(await response.json());
+  return SearchResponse.parse(data);
 }
 
 export async function getDocuments(
@@ -72,47 +58,25 @@ export async function getDocuments(
 ): Promise<DocumentsResponse> {
   const params = new URLSearchParams({ full: "false", type: "WORKSPACE" });
 
-  const response = await fetch(
-    `${BASE}/api/dos/publication-workspaces/${workspaceId}/documents?${params}`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "BelGov-Trace-Id": crypto.randomUUID(),
-      },
-    },
+  const data = await apiRequest(
+    token,
+    `/api/dos/publication-workspaces/${workspaceId}/documents?${params}`,
   );
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Document fetch failed: ${response.status} ${body}`);
-  }
-
-  return DocumentsResponse.parse(await response.json());
+  return DocumentsResponse.parse(data);
 }
 
 export async function getDownloadUrl(
   token: string,
   versionId: string,
 ): Promise<string> {
-  const response = await fetch(
-    `${BASE}/api/dos/publication-workspace-document-versions/${versionId}/download-url`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "BelGov-Trace-Id": crypto.randomUUID(),
-      },
-    },
+  const params = new URLSearchParams({ unpublished: "false" });
+  const data = await apiRequest(
+    token,
+    `/api/dos/publication-workspace-document-versions/${versionId}/download-url?${params}`,
   );
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Download url fetch failed: ${response.status} ${body}`);
-  }
-
-  const data = DownloadUrlResponse.parse(await response.json());
-
-  return data.value;
+  return DownloadUrlResponse.parse(data).value;
 }
 
 export async function downloadFile(
@@ -121,13 +85,11 @@ export async function downloadFile(
   fileName: string,
 ): Promise<string> {
   const response = await fetch(url);
-
   if (!response.ok) throw new Error(`Download failed: ${response.status}`);
 
   const bytes = Buffer.from(await response.arrayBuffer());
 
   const hash = createHash("sha256").update(bytes).digest("hex");
-
   if (hash !== expectedHash) throw new Error(`Hash mismatch for ${fileName}`);
 
   const target = path.join(
@@ -135,7 +97,6 @@ export async function downloadFile(
     "raw",
     `${hash}${path.extname(fileName).toLowerCase()}`,
   );
-
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, bytes);
 
